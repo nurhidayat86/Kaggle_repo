@@ -1,0 +1,133 @@
+import pandas as pd
+import scipy.signal as scisig
+import numpy as np
+import h5py
+from obspy.signal.tf_misfit import cwt
+from obspy.imaging.cm import obspy_sequential
+import matplotlib.pyplot as plt
+import seaborn as sns
+sns.set()
+
+class csv_importer:
+    def __init__(self, path, hd5_path, len_seg=10000, len_sig=150000, dec_factor=10):
+        self.path = path
+        self.len_seg = len_seg
+        self.hd5_path = hd5_path
+        self.len_sig = len_sig
+        self.dec_factor = dec_factor
+
+    def to_hd5(self):
+        h5 = h5py.File(self.hd5_path, 'w')
+        pd_data = pd.read_csv(self.path)
+        total = 0
+        fs_decimated = self.len_sig // self.dec_factor
+        dt = 1/fs_decimated
+
+        for idx in range(0, len(pd_data)-self.len_sig, self.len_seg):
+            print(f"data: {idx//10000} of {len(pd_data)//10000}")
+            signal = pd_data.acoustic_data.iloc[idx:idx+self.len_sig]
+            ttf = pd_data.time_to_failure.iloc[idx+self.len_sig-1]
+            signal = scisig.decimate(signal, self.dec_factor)
+
+            # fft
+            # f, t, Zxx = scisig.stft(signal)
+            # featuref = np.sum(np.absolute(Zxx), axis=1)
+            # featuret = np.sum(np.absolute(Zxx), axis=0)
+            # featurez = np.absolute(Zxx[10:,:]).reshape(1,119,119)
+
+            # signal feature
+            # signal_abs = np.abs(signal)
+            # mean = np.average(signal_abs)
+            # std = np.std(signal_abs)
+            # var = np.var(signal_abs)
+            # max = np.max(signal_abs)
+            # summ = np.sum(signal_abs)
+            # print(feature.shape)
+
+            # cwt feature
+            # signal_decimated = scisig.decimate(signal, self.dec_factor)
+            scalogram = np.absolute(cwt(signal, dt, 8, fmin=100, fmax=fs_decimated/2))
+            featurecwt_f = np.sum(scalogram, axis=1)
+
+            if total == 0:
+                # featuref_h5 = h5.create_dataset("feature_f", shape=(1, 119), maxshape=(None, 119))
+                # featuret_h5 = h5.create_dataset("feature_t", shape=(1, 119), maxshape=(None, 119))
+                # featurez_h5 = h5.create_dataset("feature_z", shape=(1, 1, 119, 119), maxshape=(None, 1, 119, 119))
+                featurecwtf_h5 = h5.create_dataset("feature_cwtf", shape=(1, 100), maxshape=(None, 100))
+                featurecwt_h5 = h5.create_dataset("feature_cwt", shape=(1, 100, 15000), maxshape=(None, 100, 15000))
+                # featurecwtt_h5 = h5.create_dataset("feature_cwtt", shape=(1, 119), maxshape=(None, 119))
+                # feature_desc = h5.create_dataset("feature_desc", shape=(1, 5), maxshape=(None, 5))
+                ttf_h5 = h5.create_dataset("ttf", shape=(1,1), maxshape=(None,1))
+            else:
+                featurecwtf_h5.resize(total + 1, axis=0)
+                featurecwt_h5.resize(total + 1, axis=0)
+                # featurecwtt_h5.resize(total + 1, axis=0)
+                # featuref_h5.resize(total+1, axis=0)
+                # featuret_h5.resize(total + 1, axis=0)
+                # featurez_h5.resize(total + 1, axis=0)
+                # feature_desc.resize(total + 1, axis=0)
+                ttf_h5.resize(total + 1, axis=0)
+
+            featurecwtf_h5[total, :] = featurecwt_f
+            featurecwt_h5[total, :] = scalogram
+            # featurecwtt_h5[total, :] = featurecwt_t
+            # featurez_h5[total, :] = featurez
+            # featuref_h5[total, :] = featuref[10:]
+            # featuret_h5[total, :] = featuret
+            # feature_desc[total, :] = np.array([mean, std, var, max, summ])
+            ttf_h5[total,:] = ttf
+            total += 1
+
+        h5.close()
+
+
+if __name__ == "__main__":
+
+    # pass
+
+    csv_path = "H:\\kaggle\\LANL-Earthquake-Prediction\\train.csv"
+    h5_path = "H:\\kaggle\\LANL-Earthquake-Prediction\\train_obspy_full.h5"
+
+    # pd_data = pd.read_csv(csv_path, nrows=700000)
+    # fs = 150000
+    # dec_i = 10
+    # fs_dec = fs // dec_i
+    #
+    # print("imported")
+    # signal = pd_data.acoustic_data.iloc[20000:20000+150000]
+    # signal = scisig.decimate(signal, dec_i)
+    # # signal = scisig.decimate(signal, 10)
+    # print("imported1")
+    # f_min = 100
+    # f_max = fs_dec/2
+    # scalogram = cwt(signal, 1 / fs_dec, 8, fmin=f_min, fmax=f_max)
+    # # f, t, Zxx = scisig.stft(signal)
+    # print(scalogram.shape)
+    #
+    # t = np.linspace(0, 1, fs//dec_i)
+    #
+    # fig = plt.figure()
+    # ax = fig.add_subplot(111)
+    #
+    # x, y = np.meshgrid(
+    #     t,
+    #     # f)
+    #     np.logspace(np.log10(f_min), np.log10(f_max), scalogram.shape[0]))
+    #
+    # ax.pcolormesh(x, y, np.absolute(scalogram), cmap=obspy_sequential)
+    # ax.set_xlabel("Time after [s]")
+    # ax.set_ylabel("Frequency [Hz]")
+    # ax.set_yscale('log')
+    # ax.set_ylim(f_min, f_max)
+    # plt.show()
+    #
+    # npf_max = np.sum(np.absolute(scalogram), axis=1)
+    # plt.plot(npf_max)
+    # plt.show()
+    #
+    # print(scalogram.shape)
+
+    importer = csv_importer(csv_path, h5_path)
+    importer.to_hd5()
+
+
